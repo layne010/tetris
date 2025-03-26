@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>经典俄罗斯方块</title>
+    <style>
+        /* 游戏主体样式 */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            background: #1a1a1a;
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        .game-container {
+            display: flex;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        #gameCanvas {
+            border: 3px solid #333;
+            background: #000;
+        }
+
+        .game-info {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            width: 200px;
+        }
+
+        .info-box {
+            margin-bottom: 20px;
+        }
+
+        .control-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin: 5px 0;
+        }
+
+        /* 反馈系统样式 */
+        .feedback-toggle {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #e67e22;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1001;
+        }
+
+        .feedback-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(44, 62, 80, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            transform: translateX(110%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .feedback-container.active {
+            transform: translateX(0);
+        }
+
+        .feedback-form input,
+        .feedback-form textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid #34495e;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .feedback-form button {
+            background: #27ae60;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .status-message {
+            color: #2ecc71;
+            text-align: center;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="300" height="600"></canvas>
+        <div class="game-info">
+            <div class="info-box">
+                <h2>得分: <span id="score">0</span></h2>
+                <h2>最高分: <span id="highScore">0</span></h2>
+            </div>
+            <div class="info-box">
+                <h3>下一个:</h3>
+                <canvas id="nextCanvas" width="100" height="100"></canvas>
+            </div>
+            <button class="control-btn" id="startBtn">开始游戏</button>
+            <button class="control-btn" id="pauseBtn">暂停游戏</button>
+            <div class="info-box">
+                <h3>操作指南:</h3>
+                <p>← → : 移动<br>
+                   ↑ : 旋转<br>
+                   ↓ : 加速<br>
+                   Space : 瞬间下落</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 反馈系统 -->
+    <button class="feedback-toggle">💬</button>
+    <div class="feedback-container">
+        <form class="feedback-form" id="feedbackForm"
+            action="https://api.web3forms.com/submit"
+            method="POST"
+            enctype="multipart/form-data">
+            
+            <input type="hidden" name="access_key" value="42f0c9fe-4dce-4ff2-9d54-fd4384369d9f">
+            <input type="hidden" name="_template" value="basic">
+            <input type="hidden" name="_subject" value="俄罗斯方块反馈">
+            <input type="hidden" name="_redirect" value="https://layne010.github.io/tetris/">
+            <input type="hidden" name="to" value="512281371@qq.com">
+            
+            <input type="text" name="name" placeholder="昵称（可选）">
+            <input type="email" name="email" placeholder="邮箱（可选）">
+            <textarea name="message" rows="4" placeholder="您的建议..." required></textarea>
+            <button type="submit">发送反馈</button>
+            <div class="status-message" id="statusMessage">反馈已发送！感谢您的建议！</div>
+        </form>
+    </div>
+
+    <script>
+        // ==================== 游戏核心代码 ====================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const nextCanvas = document.getElementById('nextCanvas');
+        const nextCtx = nextCanvas.getContext('2d');
+        const BLOCK_SIZE = 30;
+        const COLS = 10;
+        const ROWS = 20;
+        
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        let score = 0;
+        let highScore = localStorage.getItem('highScore') || 0;
+        let currentPiece = null;
+        let nextPiece = null;
+        let gameLoopId = null;
+        let isPaused = false;
+
+        const SHAPES = [
+            [[1,1,1,1]], // I
+            [[1,1,1],[0,1,0]], // T
+            [[1,1,1],[1,0,0]], // L
+            [[1,1,1],[0,0,1]], // J
+            [[1,1],[1,1]], // O
+            [[1,1,0],[0,1,1]], // S
+            [[0,1,1],[1,1,0]] // Z
+        ];
+
+        const COLORS = [
+            '#FF0D72', '#0DC2FF', '#0DFF72',
+            '#F538FF', '#FF8E0D', '#FFE138',
+            '#3877FF'
+        ];
+
+        function createPiece() {
+            const index = Math.floor(Math.random() * SHAPES.length);
+            return {
+                shape: SHAPES[index],
+                color: COLORS[index],
+                x: Math.floor(COLS/2) - 1,
+                y: 0
+            };
+        }
+
+        function drawBlock(ctx, x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
+        }
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制当前方块
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if(value) {
+                        drawBlock(ctx, currentPiece.x + x, currentPiece.y + y, currentPiece.color);
+                    }
+                });
+            });
+
+            // 绘制已固定的方块
+            board.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if(value) {
+                        drawBlock(ctx, x, y, value);
+                    }
+                });
+            });
+        }
+
+        function drawNextPiece() {
+            nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+            const offsetX = (4 - nextPiece.shape[0].length) * BLOCK_SIZE/2;
+            const offsetY = (4 - nextPiece.shape.length) * BLOCK_SIZE/2;
+            
+            nextPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if(value) {
+                        drawBlock(nextCtx, x + offsetX/BLOCK_SIZE, y + offsetY/BLOCK_SIZE, nextPiece.color);
+                    }
+                });
+            });
+        }
+
+        function isValidMove(piece, newX, newY) {
+            return piece.shape.every((row, dy) => {
+                return row.every((value, dx) => {
+                    let x = newX + dx;
+                    let y = newY + dy;
+                    return (
+                        value === 0 ||
+                        (x >= 0 && x < COLS && y < ROWS && !board[y]?.[x])
+                    );
+                });
+            });
+        }
+
+        function rotatePiece() {
+            const rotated = currentPiece.shape[0].map((_, i) =>
+                currentPiece.shape.map(row => row[i]).reverse()
+            );
+            const previousShape = currentPiece.shape;
+            currentPiece.shape = rotated;
+            if (!isValidMove(currentPiece, currentPiece.x, currentPiece.y)) {
+                currentPiece.shape = previousShape;
+            }
+        }
+
+        function clearLines() {
+            let linesCleared = 0;
+            
+            for(let y = ROWS - 1; y >= 0; y--) {
+                if(board[y].every(cell => cell !== 0)) {
+                    board.splice(y, 1);
+                    board.unshift(Array(COLS).fill(0));
+                    linesCleared++;
+                    y++;
+                }
+            }
+
+            if(linesCleared > 0) {
+                score += [100, 300, 500, 800][linesCleared - 1];
+                document.getElementById('score').textContent = score;
+                if(score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('highScore', highScore);
+                    document.getElementById('highScore').textContent = highScore;
+                }
+            }
+        }
+
+        function mergePiece() {
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if(value) {
+                        board[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+                    }
+                });
+            });
+            clearLines();
+        }
+
+        function gameOver() {
+            cancelAnimationFrame(gameLoopId);
+            alert(`游戏结束！得分：${score}`);
+            document.getElementById('startBtn').disabled = false;
+        }
+
+        function update() {
+            if(isPaused) return;
+
+            if(isValidMove(currentPiece, currentPiece.x, currentPiece.y + 1)) {
+                currentPiece.y++;
+            } else {
+                mergePiece();
+                currentPiece = nextPiece;
+                nextPiece = createPiece();
+                drawNextPiece();
+                
+                if(!isValidMove(currentPiece, currentPiece.x, currentPiece.y)) {
+                    gameOver();
+                    return;
+                }
+            }
+            drawBoard();
+        }
+
+        // ==================== 游戏控制 ====================
+        document.getElementById('startBtn').addEventListener('click', () => {
+            score = 0;
+            document.getElementById('score').textContent = 0;
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            currentPiece = createPiece();
+            nextPiece = createPiece();
+            drawNextPiece();
+            document.getElementById('startBtn').disabled = true;
+            gameLoopId = setInterval(update, 1000);
+        });
+
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            isPaused = !isPaused;
+            document.getElementById('pauseBtn').textContent = isPaused ? '继续游戏' : '暂停游戏';
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if(!currentPiece) return;
+
+            switch(e.key) {
+                case 'ArrowLeft':
+                    if(isValidMove(currentPiece, currentPiece.x - 1, currentPiece.y)) {
+                        currentPiece.x--;
+                        drawBoard();
+                    }
+                    break;
+                case 'ArrowRight':
+                    if(isValidMove(currentPiece, currentPiece.x + 1, currentPiece.y)) {
+                        currentPiece.x++;
+                        drawBoard();
+                    }
+                    break;
+                case 'ArrowUp':
+                    rotatePiece();
+                    drawBoard();
+                    break;
+                case 'ArrowDown':
+                    if(isValidMove(currentPiece, currentPiece.x, currentPiece.y + 1)) {
+                        currentPiece.y++;
+                        drawBoard();
+                    }
+                    break;
+                case ' ':
+                    while(isValidMove(currentPiece, currentPiece.x, currentPiece.y + 1)) {
+                        currentPiece.y++;
+                    }
+                    update();
+                    break;
+            }
+        });
+
+        // ==================== 反馈系统 ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            const feedbackToggle = document.querySelector('.feedback-toggle');
+            const feedbackContainer = document.querySelector('.feedback-container');
+            const form = document.getElementById('feedbackForm');
+            const statusMsg = document.getElementById('statusMessage');
+
+            feedbackToggle.addEventListener('click', () => {
+                feedbackContainer.classList.toggle('active');
+            });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const submitButton = form.querySelector('button[type="submit"]');
+                submitButton.disabled = true;
+                statusMsg.style.display = 'none';
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        statusMsg.style.display = 'block';
+                        form.reset();
+                        setTimeout(() => {
+                            feedbackContainer.classList.remove('active');
+                            statusMsg.style.display = 'none';
+                        }, 2000);
+                    } else {
+                        alert('提交失败：' + (data.message || '未知错误'));
+                    }
+                } catch (error) {
+                    alert('网络错误：请检查网络连接');
+                } finally {
+                    submitButton.disabled = false;
+                }
+            });
+        });
+
+        // 初始化最高分显示
+        document.getElementById('highScore').textContent = highScore;
+    </script>
+</body>
+</html>
