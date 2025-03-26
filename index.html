@@ -3,7 +3,6 @@
 <head>
     <title>经典俄罗斯方块</title>
     <style>
-        /* 游戏主体样式 */
         body {
             display: flex;
             justify-content: center;
@@ -21,11 +20,16 @@
             margin-top: 30px;
         }
 
+        /* 游戏区域显示尺寸保持300x600 */
         #gameCanvas {
+            width: 300px;
+            height: 600px;
             border: 3px solid #333;
             background: #000;
+            image-rendering: pixelated; /* 保持像素风格 */
         }
 
+        /* 实际像素尺寸200x400 */
         .game-info {
             background: #2a2a2a;
             padding: 20px;
@@ -48,7 +52,14 @@
             margin: 5px 0;
         }
 
-        /* 反馈系统样式 */
+        /* 预览区域适配新尺寸 */
+        #nextCanvas {
+            width: 80px;
+            height: 80px;
+            image-rendering: pixelated;
+        }
+
+        /* 反馈系统样式保持不变 */
         .feedback-toggle {
             position: fixed;
             bottom: 30px;
@@ -116,7 +127,8 @@
 </head>
 <body>
     <div class="game-container">
-        <canvas id="gameCanvas" width="300" height="600"></canvas>
+        <!-- 实际像素尺寸200x400，显示尺寸300x600 -->
+        <canvas id="gameCanvas" width="200" height="400"></canvas>
         <div class="game-info">
             <div class="info-box">
                 <h2>得分: <span id="score">0</span></h2>
@@ -124,7 +136,7 @@
             </div>
             <div class="info-box">
                 <h3>下一个:</h3>
-                <canvas id="nextCanvas" width="100" height="100"></canvas>
+                <canvas id="nextCanvas" width="80" height="80"></canvas>
             </div>
             <button class="control-btn" id="startBtn">开始游戏</button>
             <button class="control-btn" id="pauseBtn">暂停游戏</button>
@@ -149,7 +161,7 @@
             <input type="hidden" name="access_key" value="42f0c9fe-4dce-4ff2-9d54-fd4384369d9f">
             <input type="hidden" name="_template" value="basic">
             <input type="hidden" name="_subject" value="俄罗斯方块反馈">
-            <input type="hidden" name="_redirect" value="https://layne010.github.io/tetris/">
+            <input type="hidden" name="_redirect" value="https://layne010.github.io/Brick-fighting-game/">
             <input type="hidden" name="to" value="512281371@qq.com">
             
             <input type="text" name="name" placeholder="昵称（可选）">
@@ -161,15 +173,16 @@
     </div>
 
     <script>
-        // ==================== 游戏核心代码 ====================
+        // ==================== 游戏核心参数 ====================
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const nextCanvas = document.getElementById('nextCanvas');
         const nextCtx = nextCanvas.getContext('2d');
-        const BLOCK_SIZE = 30;
-        const COLS = 10;
-        const ROWS = 20;
+        const BLOCK_SIZE = 20;  // 单个方块像素尺寸
+        const COLS = 10;        // 保持10列不变（200/20=10）
+        const ROWS = 20;        // 保持20行不变（400/20=20）
         
+        // 游戏状态变量
         let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
         let score = 0;
         let highScore = localStorage.getItem('highScore') || 0;
@@ -178,6 +191,7 @@
         let gameLoopId = null;
         let isPaused = false;
 
+        // 方块形状和颜色配置
         const SHAPES = [
             [[1,1,1,1]], // I
             [[1,1,1],[0,1,0]], // T
@@ -194,6 +208,7 @@
             '#3877FF'
         ];
 
+        // ==================== 游戏逻辑 ====================
         function createPiece() {
             const index = Math.floor(Math.random() * SHAPES.length);
             return {
@@ -239,7 +254,13 @@
             nextPiece.shape.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if(value) {
-                        drawBlock(nextCtx, x + offsetX/BLOCK_SIZE, y + offsetY/BLOCK_SIZE, nextPiece.color);
+                        nextCtx.fillStyle = nextPiece.color;
+                        nextCtx.fillRect(
+                            (x * BLOCK_SIZE) + offsetX,
+                            (y * BLOCK_SIZE) + offsetY,
+                            BLOCK_SIZE - 1,
+                            BLOCK_SIZE - 1
+                        );
                     }
                 });
             });
